@@ -1,0 +1,154 @@
+import http.client, urllib.request, urllib.parse, urllib.error, base64
+import requests
+
+subscription_key = "80d68f1211af4c5aa5dac482757a9488"
+headers = {
+    # Request headers
+    'Content-Type': 'application/json',
+    'Ocp-Apim-Subscription-Key': subscription_key,
+}
+
+params = urllib.parse.urlencode({
+    "name": "group1",
+    "userData": "user-provided data attached to the person group.",
+    "recognitionModel": "recognition_02"
+
+})
+####################################
+###create persongroup##############
+    
+personGroupId="famous"
+body = dict()
+body["name"] = "F.A.M.O.U.S"
+body["userData"] = "All famous cast"
+#body["recognitionModel"] = "recognition_02"
+body = str(body)
+
+#Request URL 
+FaceApiCreateLargePersonGroup = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/persongroups/'+personGroupId 
+
+try:
+    # REST Call 
+    response = requests.put(FaceApiCreateLargePersonGroup, data=body, headers=headers) 
+    print("RESPONSE:" + str(response.status_code)) 
+
+except Exception as e:
+    print(e)
+    
+#Request Body
+body = dict()
+body["name"] = "ryu"
+body["userData"] = "Famous"
+body = str(body)
+
+#Request URL 
+FaceApiCreatePerson = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/persongroups/'+personGroupId+'/persons' 
+
+try:
+    # REST Call 
+    response = requests.post(FaceApiCreatePerson, data=body, headers=headers) 
+    responseJson = response.json()
+    personId = responseJson["personId"]
+    print("PERSONID: "+str(personId))
+    
+except Exception as e:
+    print(e)
+
+
+ryuImageList=[]
+for i in range(1,200):
+    ryuImageList.append('C:\\Users\\Administrator\\Desktop\\cj_biosemester\\'r'+i+'.jpg')
+
+
+#Request URL 
+FaceApiCreatePerson = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/persongroups/'+personGroupId+'/persons/'+personId+'/persistedFaces' 
+
+for image in ryuImageList:
+    body = dict()
+    body["url"] = image
+    body = str(body)
+    data=open(image,'rb')
+    
+    try:
+        # REST Call 
+        response = requests.post(FaceApiCreatePerson, data=data, headers=headers) 
+        responseJson = response.json()
+        persistedFaceId = responseJson["persistedFaceId"]
+        print("PERSISTED FACE ID: "+str(persistedFaceId))
+    
+    except Exception as e:
+        print(e)
+        
+######train 
+#Request Body
+body = dict()
+
+#Request URL 
+FaceApiTrain = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/persongroups/'+personGroupId+'/train'
+
+try:
+    # REST Call 
+    response = requests.post(FaceApiTrain, data=body, headers=headers) 
+    print("RESPONSE:" + str(response.status_code))
+
+except Exception as e:
+    print(e)
+
+
+###face detect 
+# Request Body
+body = dict()
+body['url']= 'C:\\Users\\Administrator\\Desktop\\cj_biosemester\\ryu.jpg'
+body = str(body)
+data=open(body['url'],'rb')
+# Request URL 
+FaceApiDetect = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/detect?returnFaceId=true' 
+
+try:
+    # REST Call 
+    response = requests.post(FaceApiDetect, data=body, headers=headers) 
+    print(response)
+    responseJson = response.json()
+    print(responseJson)
+    faceId = responseJson[0]["faceId"] 
+    print("FACE ID: "+str(faceId))
+
+except Exception as e:
+    print(e)
+    
+######face identify
+faceIdsList = [faceId]
+
+# Request Body
+body = dict()
+body["personGroupId"] = personGroupId
+body["faceIds"] = faceIdsList
+body["maxNumOfCandidatesReturned"] = 1 
+body["confidenceThreshold"] = 0.5
+body = str(body)
+
+# Request URL 
+FaceApiIdentify = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/identify' 
+
+try:
+    # REST Call 
+    response = requests.post(FaceApiIdentify, data=body, headers=headers) 
+    responseJson = response.json()
+    print(responseJson)
+    personId = responseJson[0]["candidates"][0]["personId"]
+    confidence = responseJson[0]["candidates"][0]["confidence"]
+    print("PERSON ID: "+str(personId)+ ", CONFIDENCE :"+str(confidence))
+        
+except Exception as e:
+    print("Could not detect")
+
+FaceApiGetPerson = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/persongroups/'+personGroupId+'/persons/'+personId
+
+try:
+    response = requests.get(FaceApiGetPerson, headers=headers) 
+    responseJson = response.json()
+    print("This Is "+str(responseJson["name"]))
+    
+except Exception as e:
+    print(e)
+    
