@@ -1,117 +1,95 @@
-import dlib, cv2
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import matplotlib.patheffects as path_effects
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Nov 14 11:50:51 2019
 
-detector = dlib.get_frontal_face_detector()
-sp = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
-facerec = dlib.face_recognition_model_v1('models/dlib_face_recognition_resnet_model_v1.dat')
+@author: setgo
+"""
 
+import http.client, urllib.request, urllib.parse, urllib.error
+import requests
+import cv2
 
-def find_faces(img):
-    dets = detector(img, 1)
+class Test:
+    def __init__(self):
+        self.subscription_key = "80d68f1211af4c5aa5dac482757a9488"
+        self.endpoint= 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/persongroups/'
+        self.ImgUrl='C:\\Users\\Administrator\\Desktop\\cj_biosemester\\'
+    
+    def faceDetect(self):
+        body = dict()
+        body["url"]= self.ImgUrl+'you\\y1.jpg'
+        img_bgr= cv2.imread(body['url'],cv2.IMREAD_COLOR)
 
-    if len(dets) == 0:
-        return np.empty(0), np.empty(0), np.empty(0)
+        data=open(body['url'],'rb')
+        # Request URL 
+        FaceApiDetect = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/detect?returnFaceId=true' 
+        headers = {
+            # Request headers
+            #'Content-Type': 'application/json',
+            'Content-Type': 'application/octet-stream',
+            'Ocp-Apim-Subscription-Key': self.subscription_key
+            }
 
-    rects, shapes = [], []
-    shapes_np = np.zeros((len(dets), 68, 2), dtype=np.int)
-    for k, d in enumerate(dets):
-        rect = ((d.left(), d.top()), (d.right(), d.bottom()))
-        rects.append(rect)
+        try:
+            # REST Call 
+            response = requests.post(FaceApiDetect, data=data, headers=headers) 
+            responseJson = response.json()
+            faceId = responseJson[0]["faceId"] 
+            print("FACE ID: "+str(faceId))
+            rectangle=responseJson[0]["faceRectangle"]
+            top=rectangle['top']
+            left=rectangle['left']
+            width=rectangle['width']
+            height=rectangle['height']
+            bottom=left+height
+            right=top+width
 
-        shape = sp(img, d)
+        except Exception as e:
+            print(e)
+        return(img_bgr, faceId, left, top, bottom, right)
+        
+    def faceidentify(self, personGroupId, img_bgr,faceID, left, top, bottom, right):
+        faceIdsList = [faceID]
+        faceIdsList.append(faceID)
+        # Request Body
+        body = dict()
+        body["personGroupId"] = personGroupId
+        body["faceIds"] = faceIdsList
+        body["maxNumOfCandidatesReturned"] = 1 
+        body["confidenceThreshold"] = 0.5
+        body = str(body)
+    
+        # Request URL 
+        FaceApiIdentify = 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/identify' 
+        headers = {
+                # Request headers
+                'Content-Type': 'application/json',
+                #'Content-Type': 'application/octet-stream',
+                'Ocp-Apim-Subscription-Key': self.subscription_key
+                }
+        try:
+            # REST Call 
+            response = requests.post(FaceApiIdentify, data=body, headers=headers) 
+            responseJson = response.json()
+            personId = responseJson[0]["candidates"][0]["personId"]
+            confidence = responseJson[0]["candidates"][0]["confidence"]
+            print("PERSON ID: "+str(personId)+ ", CONFIDENCE :"+str(confidence))
+        
+        except Exception as e:
+            print("Could not detect")
 
-        # convert dlib shape to numpy array
-        for i in range(0, 68):
-            shapes_np[k][i] = (shape.part(i).x, shape.part(i).y)
+        FaceApiGetPerson = self.endpoint+personGroupId+'/persons/'+personId
 
-        shapes.append(shape)
+        try:
+            response = requests.get(FaceApiGetPerson, headers=headers) 
+            responseJson = response.json()
+            print("This Is "+str(responseJson["name"]))
+            cv2.putText(img_bgr,str(responseJson["name"]),(left,top-10),cv2.FONT_HERSHEY_SIMPLEX,0.5,(0,0,255),2)
+            cv2.rectangle(img_bgr,(left,top),(bottom,right),(0,0,255),1)
+            cv2.imshow('1',img_bgr)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+    
+        except Exception as e:
+            print(e)
 
-    return rects, shapes, shapes_np
-
-
-def encode_faces(img, shapes):
-    face_descriptors = []
-    for shape in shapes:
-        face_descriptor = facerec.compute_face_descriptor(img, shape)
-        face_descriptors.append(np.array(face_descriptor))
-
-    return np.array(face_descriptors)
-
-
-
-img_paths = {
-    'neo': 'img/neo.jpg',
-    'trinity': 'img/trinity.jpg',
-    'morpheus': 'img/morpheus.jpg',
-    'smith': 'img/smith.jpg',
- #   'jung':'img/jung,jpg',
-  #  'juri':'img/ju.jpg',
-    'enae':'img/en.jpg',
-    'sorea':'img/so.jpg'
-}
-
-descs = {
-    'neo': None,
-    'trinity': None,
-    'morpheus': None,
-    'smith': None,
- #   'jung':None,
-  #  'juri':None,
-    'enae':None,
-    'sorea':None
-}
-
-for name, img_path in img_paths.items():
-    img_bgr = cv2.imread(img_path)
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-
-    _, img_shapes, _ = find_faces(img_rgb)
-    descs[name] = encode_faces(img_rgb, img_shapes)[0]
-
-np.save('img/descs.npy', descs)
-print(descs)
-
-img_bgr = cv2.imread('img/middleschool.jpg')
-img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-
-rects, shapes, _ = find_faces(img_rgb)
-descriptors = encode_faces(img_rgb, shapes)
-
-fig, ax = plt.subplots(1, figsize=(20, 20))
-ax.imshow(img_rgb)
-
-for i, desc in enumerate(descriptors):
-
-    found = False
-    for name, saved_desc in descs.items():
-        dist = np.linalg.norm([desc] - saved_desc, axis=1)
-
-        if dist < 0.6:
-            found = True
-
-            text = ax.text(rects[i][0][0], rects[i][0][1], name,
-                           color='b', fontsize=40, fontweight='bold')
-            text.set_path_effects([path_effects.Stroke(linewidth=10, foreground='white'), path_effects.Normal()])
-            rect = patches.Rectangle(rects[i][0],
-                                     rects[i][1][1] - rects[i][0][1],
-                                     rects[i][1][0] - rects[i][0][0],
-                                     linewidth=2, edgecolor='w', facecolor='none')
-            ax.add_patch(rect)
-
-            break
-
-    if not found:
-        ax.text(rects[i][0][0], rects[i][0][1], 'unknown',
-                color='r', fontsize=20, fontweight='bold')
-        rect = patches.Rectangle(rects[i][0],
-                                 rects[i][1][1] - rects[i][0][1],
-                                 rects[i][1][0] - rects[i][0][0],
-                                 linewidth=2, edgecolor='r', facecolor='none')
-        ax.add_patch(rect)
-
-plt.axis('off')
-plt.savefig('result/output.png')
-plt.show()
