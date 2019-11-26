@@ -10,7 +10,7 @@ import http.client, urllib.request, urllib.parse, urllib.error, base64
 import requests
 import cv2
 import pymongo
-
+import pprint
 #myclient = pymongo.MongoClient("mongodb://localhost:27017/")
 
 #mydb=myclient["employee"]
@@ -27,8 +27,9 @@ class storeData:
         self.endpoint= 'https://koreacentral.api.cognitive.microsoft.com/face/v1.0/persongroups/'
         self.ImgUrl='C:\\Users\\Administrator\\Desktop\\cj_biosemester\\'
     
-    def createPersongroup(self):
-        personGroupId="famous34"
+    def createPersongroup(self,groupname):
+        personGroupId=groupname
+        print(personGroupId)
         body = dict()
         body["name"] = "F.A.M.O.U.S"
         body["userData"] = "All famous cast"
@@ -42,97 +43,101 @@ class storeData:
                 'Content-Type': 'application/json',
                 #'Content-Type': 'application/octet-stream',
                 'Ocp-Apim-Subscription-Key': self.subscription_key
-                }
-        
+                } 
         try:
             # REST Call 
             response = requests.put(FaceApiCreateLargePersonGroup, data=body, headers=headers) 
             print("RESPONSE:" + str(response.status_code)) 
-
         except Exception as e:
             print(e)
         
-        return(personGroupId)
-        
- #   def savePersonImage(self,name,famousList):
- #       cap =cv2.VideoCapture(0)
- #       frame_count = 0
- #       famousList.append(name)
- #       while(True):
- #           ret, frame = cap.read()
- #           frame_count+=1
- #           cv2.imshow('unknown',frame)
- #           if frame_count%5==0:
- #               cv2.imwrite(name+str(frame_count)+'.jpg',frame)
- #           if cv2.waitKey(20)&0xFF == ord('q'):
- #               break
- #       cap.release()
- #       cv2.destroyAllWindows()
- #       return famousList
-
-
-    def createPerson(self,personGroupId):
+    
+    def newPerson(self):
         myclient = pymongo.MongoClient("mongodb://localhost:27017/")
         mydb=myclient["employee"]
         mycol=mydb["person"]
+        name = str(input("이름을 입력하세요 : "))
+        groupname = str(input("소속명을 입력하세요 : "))
+        
+        personDict={"name":name}
+        mycol.insert_one(personDict)
+        
+        for i in mycol.find(personDict):
+            personID=i['_id']
+            personID=repr(personID)
+        return name, personID, groupname
+        
+        
+    def savePersonImage(self,personID,personList,name):
+        cap =cv2.VideoCapture(0)
+        frame_count = 0
+        personList.append(personID)
+        personImageList=[]
+        while(True):
+            ret, frame = cap.read()
+            frame_count+=1
+            cv2.imshow('unknown',frame)
+            if frame_count%10==0:
+                personImageList.append(self.ImgUrl+'data\\images\\'+personID+str(int(frame_count/10))+'.jpg')
+                cv2.imwrite(self.ImgUrl + 'data\\images\\' +personID + str(int(frame_count/10))+'.jpg',frame)
+            if cv2.waitKey(20)&0xFF == 13:
+                break
+        cap.release()
+        cv2.destroyAllWindows()
+        return personList,personImageList
 
-        famousList=['han','son','you','ryu','jay','yoon','yyy','lee']
-        for i in famousList:
-            body=dict()
-            body["name"]=i
-            body['userData']='famous'+i
-            body=str(body)
+
+    def createPerson(self,personGroupId,personID,personImageList,name):
+       myclient = pymongo.MongoClient("mongodb://localhost:27017/")
+       mydb=myclient["employee"]
+       mycol=mydb["person"]
+       
+       
+       groupcol=mydb["group"]
+       groupcol[personGroupId]
+       body=dict()
+       body["name"]=personID
+       body['userData']= "person1"
+       body=str(body) 
+       print("-------------------------------------------------")
+       print(personGroupId)
+       FaceApiCreatePerson = self.endpoint+personGroupId+'/persons'         
+       
+       headers = {
+               'Content-Type': 'application/json',
+               'Ocp-Apim-Subscription-Key': self.subscription_key
+               }
+       try:
+           response = requests.post(FaceApiCreatePerson, data=body, headers=headers) 
+           print(response)
+           responseJson = response.json()
+           print(responseJson)
+           apipersonId = responseJson["personId"]
+           print("PERSONID: "+str(apipersonId))
+           personDict={"name":name,"personId":str(apipersonId)}
+           mycol.update({"name":name},personDict)
+         
+       except Exception as e:
+           print(e)
+           
+       FaceApiCreatePerson = self.endpoint+personGroupId+'/persons/'+apipersonId+'/persistedFaces' 
+
+       for image in personImageList:
+            body = dict()
+            body["url"] = image
+            body = str(body)
+            data=open(image,'rb')
     
-            #Request URL 
-            FaceApiCreatePerson = self.endpoint+personGroupId+'/persons' 
-        
             headers = {
-                    # Request headers
-                    'Content-Type': 'application/json',
-                    #'Content-Type': 'application/octet-stream',
-                    'Ocp-Apim-Subscription-Key': self.subscription_key
-                    }
-    
-            try:
-                # REST Call 
-               response = requests.post(FaceApiCreatePerson, data=body, headers=headers) 
-               responseJson = response.json()
-               personId = responseJson["personId"]
-               print("PERSONID: "+str(personId))
-               personDict={"name":i,"personId":str(personId)}
-               x=mycol.insert_one(personDict)
-               print(x)
-    
-            except Exception as e:
-                print(e)
-    
-            personImageList=[]
-        
-            for j in range(1,2):
-                personImageList.append(self.ImgUrl+i+'\\'+i[0]+str(j)+'.jpg')
-                headers = {
-                        # Request headers
-                        #'Content-Type': 'application/json',
                         'Content-Type': 'application/octet-stream',
                         'Ocp-Apim-Subscription-Key': self.subscription_key
                         }  
-
-            #Request URL 
-            FaceApiCreatePerson = self.endpoint+personGroupId+'/persons/'+personId+'/persistedFaces' 
-
-            for image in personImageList:
-                body = dict()
-                body["url"] = image
-                body = str(body)
-                data=open(image,'rb')
+            try:
+                response = requests.post(FaceApiCreatePerson, data=data, headers=headers) 
+                responseJson = response.json()
+                persistedFaceId = responseJson["persistedFaceId"]
+                print("PERSISTED FACE ID: "+str(persistedFaceId))
     
-                try:
-                    # REST Call 
-                    response = requests.post(FaceApiCreatePerson, data=data, headers=headers) 
-                    responseJson = response.json()
-                    persistedFaceId = responseJson["persistedFaceId"]
-                    print("PERSISTED FACE ID: "+str(persistedFaceId))
-    
-                except Exception as e:
-                    print(e)
-                    print('에러에러')
+            except Exception as e:
+                print(e)
+                print('에러에러')
